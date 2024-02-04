@@ -605,6 +605,7 @@ progress {
   max-width: 100%;
   padding: 20 px;
   height: auto;
+  object-fit: contain;
 }
 
 .img-thumbnail {
