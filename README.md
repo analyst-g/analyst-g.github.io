@@ -9,4 +9,4 @@
 
 ## Copyright and License
 
-Copyright 2024 Prateek Gautam. Code released under the [MIT] license.
+Copyright 2024 Prateek Gautam. Code released under the MIT license.
