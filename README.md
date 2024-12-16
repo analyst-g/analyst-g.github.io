@@ -1,4 +1,3 @@
-
 ## Welcome to Prateek's website!
 
 <p>Hi, I am Prateek, a financial data scientist and tech educator. </p>
