@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reading Insights — KDP Author Analytics (Prototype v2)</title>
+<style>
+  :root{
+    --bg:#eef1f5; --card:#ffffff; --ink:#0f1b2d; --muted:#5b6b7f; --line:#e2e8f0;
+    --teal:#0b8a84; --teal-dark:#076e69; --teal-soft:#d6efed;
+    --slate:#6b7c93; --indigo:#4f46e5;
+    --amber:#d97706; --amber-bg:#fff7e6; --amber-ink:#a85d00;
+    --green:#1a7f37; --green-soft:#e6f4ea; --red:#b42318; --red-soft:#fdecea;
+    --shadow:0 1px 2px rgba(15,27,45,.06),0 6px 24px rgba(15,27,45,.06);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 20px 64px}
+  a{color:var(--teal-dark)}
+  h2,h3,h4{margin:0}
+  p{margin:0}
+
+  /* ---------- visually hidden ---------- */
+  /* Wrap tables in a .vh DIV, never apply .vh to <table>: table layout ignores
+     width:1px and the box would widen the document. A block wrapper clips it. */
+  .vh{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0 0 0 0);clip-path:inset(50%);border:0}
+
+  /* ---------- banner + nav ---------- */
+  .banner{background:var(--amber-bg);border-bottom:1px solid #ffe2ad;color:var(--amber-ink);
+    font-size:13px;text-align:center;padding:7px 16px}
+  .banner b{color:#7a4600}
+  header.nav{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    max-width:1140px;margin:0 auto;padding:16px 20px 6px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px}
+  .brand .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--teal),#0aa39b);
+    display:flex;align-items:center;justify-content:center}
+  .tag{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:#fff}
+
+  /* ---------- book header ---------- */
+  .book{display:flex;gap:20px;background:var(--card);border:1px solid var(--line);
+    border-radius:16px;padding:20px;box-shadow:var(--shadow);margin-top:8px}
+  .cover{width:104px;min-width:104px;height:158px;border-radius:8px;overflow:hidden;position:relative;
+    background:linear-gradient(160deg,#12303a,#0b1f28);box-shadow:0 8px 22px rgba(11,31,40,.35);
+    display:flex;flex-direction:column;justify-content:space-between;padding:12px 10px;color:#eaf6f4}
+  .cover .kw{font-size:8px;letter-spacing:.16em;opacity:.75;text-transform:uppercase}
+  .cover .ct{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:19px;line-height:1.05;letter-spacing:.02em}
+  .cover .ca{font-size:10px;opacity:.85;letter-spacing:.04em}
+  .cover .ribbon{position:absolute;top:10px;right:-26px;transform:rotate(45deg);background:var(--amber);
+    color:#fff;font-size:8px;font-weight:800;padding:2px 28px;letter-spacing:.08em}
+  .book .meta{flex:1;min-width:0}
+  .book h1{margin:2px 0 2px;font-size:22px}
+  .book .byline{color:var(--muted);margin-bottom:10px;font-size:14px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .chip{font-size:12px;background:#f3f6f9;border:1px solid var(--line);border-radius:8px;padding:5px 10px;color:#33455b}
+  .chip b{color:var(--ink)}
+  .chip.ku{background:var(--teal-soft);border-color:#b9e4e0;color:var(--teal-dark)}
+  .switcher{display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .switcher label{font-size:12.5px;color:var(--muted)}
+  select{font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;
+    background:#fff;color:var(--ink)}
+  select:focus-visible,button:focus-visible,input:focus-visible,[tabindex]:focus-visible{
+    outline:3px solid #1263c6;outline-offset:2px}
+
+  /* ---------- sections ---------- */
+  section{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:22px;box-shadow:var(--shadow);margin-top:18px}
+  .sh{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+  .sh h2{font-size:17px}
+  .sub{color:var(--muted);font-size:13px;margin:3px 0 16px}
+  .note{font-size:12.5px;color:var(--muted)}
+  .soft{background:#fbfcfe;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;
+    font-size:13px;color:#33455b}
+
+  /* ---------- status flags + provisional sections ----------
+     Two variants on one .flag base, kept visually apart so they cannot be read
+     as the same status.
+       .flag.open (amber) — the scope is undecided and the block may not ship.
+         It is the only variant that pairs with .provisional on the section,
+         which draws the dashed border. Amber, not red: undecided, not broken.
+       .flag.lift (teal) — the block is wanted; the open question is how much
+         data work it needs. No dashed border, and not a warning. */
+  .flag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;
+    letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:3px 10px;
+    border:1px solid var(--line);background:#f7f9fc;color:#33455b}
+  .flag.open{color:var(--amber-ink);background:var(--amber-bg);border-color:#ffe2ad}
+  .flag.lift{color:var(--teal-dark);background:var(--teal-soft);border-color:#b9e4e0}
+  section.provisional{border:1px dashed #f0c98a;background:#fffdf8}
+  section.provisional .cost{background:#fff}
+
+  /* ---------- hero ---------- */
+  section.hero{border-left:5px solid var(--teal);padding:26px 24px}
+  .kicker{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--teal-dark)}
+  .lead{font-size:27px;line-height:1.28;font-weight:700;letter-spacing:-.01em;margin:8px 0 4px;max-width:44ch}
+  .lead .hi{color:var(--teal-dark)}
+  .lead-sub{color:var(--muted);font-size:14px;margin-top:8px;max-width:70ch}
+  .herostats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}
+  .hs{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fbfcfe}
+  .hs .k{font-size:12px;color:var(--muted)}
+  .hs .v{font-size:32px;font-weight:800;letter-spacing:-.02em;margin:4px 0 2px}
+  .hs .v .u{font-size:15px;font-weight:700;color:var(--muted)}
+  .hs .d{font-size:12.5px;color:#33455b}
+  .delta{font-weight:700;font-size:12.5px;display:inline-flex;align-items:center;gap:4px;
+    border-radius:999px;padding:2px 8px;border:1px solid transparent}
+  .delta.up{color:var(--green);background:var(--green-soft);border-color:#bfe3c9}
+  .delta.down{color:var(--red);background:var(--red-soft);border-color:#f3c9c4}
+  .delta.flat{color:#33455b;background:#f3f6f9;border-color:var(--line)}
+
+  /* ---------- funnel ---------- */
+  .funnel{margin-top:6px}
+  .frow{display:grid;grid-template-columns:190px 1fr 150px;gap:14px;align-items:center;
+    padding:12px 0}
+  .frow .fl{min-width:0}
+  .frow .fl .name{font-weight:700;font-size:14px}
+  .frow .fl .cnt{font-size:12.5px;color:#33455b}
+  .frow .fl .conv{font-size:12px;color:var(--muted)}
+  .track{position:relative;background:#f3f6f9;border:1px solid var(--line);border-radius:7px;height:34px}
+  .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--teal),#0aa39b);
+    border-radius:6px 3px 3px 6px;display:flex;align-items:center;justify-content:flex-end;
+    padding-right:9px;color:#fff;font-size:12.5px;font-weight:700}
+  .fill.thin{justify-content:flex-start;padding-left:9px}
+  .tick{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--slate)}
+  .tick::after{content:attr(data-lab);position:absolute;top:-17px;left:50%;transform:translateX(-50%);
+    font-size:10.5px;color:var(--slate);white-space:nowrap;font-weight:700}
+  .frow .fr{text-align:right;font-size:12.5px;color:#33455b}
+  .loss{display:flex;gap:9px;align-items:flex-start;margin:0 0 0 4px;padding:8px 0 8px 14px;
+    border-left:2px dashed #cfd8e3;font-size:12.5px;color:#33455b}
+  .loss .dn{color:var(--red);font-weight:800;flex:none}
+  .cohortdef{margin-top:14px;background:#f7f9fc;border:1px solid var(--line);border-radius:10px;
+    padding:11px 13px;font-size:12.5px;color:#33455b}
+  .cohortdef b{color:var(--ink)}
+  .swatch{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+
+  /* ---------- chart shell ---------- */
+  .controls{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:2px 0 12px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#f7f9fc}
+  .seg button{font:inherit;font-size:12.5px;padding:7px 13px;border:0;background:transparent;
+    color:#33455b;cursor:pointer}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button[aria-pressed="true"]{background:var(--teal-dark);color:#fff;font-weight:700}
+  .toggles{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:#33455b}
+  .toggles label{display:inline-flex;align-items:center;gap:7px;cursor:pointer}
+  .chartwrap{position:relative;width:100%}
+  svg.chart{width:100%;height:auto;display:block;overflow:visible;border-radius:8px}
+  svg.chart:focus{outline:none}
+  svg.chart:focus-visible{outline:3px solid #1263c6;outline-offset:3px}
+  .tip{position:absolute;pointer-events:none;background:#0f1b2d;color:#fff;font-size:12px;
+    border-radius:8px;padding:8px 10px;transform:translate(-50%,-118%);opacity:0;
+    transition:opacity .08s;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:5;max-width:260px}
+  .tip .hd{color:#cfe9e7;font-size:11px;letter-spacing:.03em;text-transform:uppercase}
+  .tip .r{display:flex;justify-content:space-between;gap:12px;margin-top:3px}
+  .tip .r span:last-child{font-weight:700}
+  .readout{margin-top:10px;font-size:12.5px;color:#33455b;background:#f7f9fc;border:1px solid var(--line);
+    border-radius:8px;padding:8px 11px;min-height:36px}
+  .readout b{color:var(--ink)}
+  .kbdhint{font-size:12px;color:var(--muted);margin-top:8px}
+  kbd{font-family:var(--mono);font-size:11px;background:#f3f6f9;border:1px solid var(--line);
+    border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:#33455b}
+
+  /* ---------- engagement ---------- */
+  .engbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+  button.btn{font:inherit;font-size:12.5px;padding:7px 12px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);border-radius:9px;cursor:pointer}
+  button.btn:hover{background:#f7f9fc}
+  button.btn[aria-pressed="true"]{background:var(--teal-dark);color:#fff;border-color:var(--teal-dark);font-weight:700}
+  .noteinput{position:absolute;z-index:8;background:#fff;border:1px solid var(--indigo);
+    border-radius:9px;padding:7px;box-shadow:0 8px 22px rgba(15,27,45,.18);display:none;gap:6px;align-items:center}
+  .noteinput input{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);
+    border-radius:6px;width:220px}
+  .noteinput .h{font-size:11px;color:var(--muted);white-space:nowrap}
+  .notelist{margin-top:12px;font-size:12.5px;color:#33455b}
+  .notelist ul{margin:6px 0 0;padding-left:0;list-style:none}
+  .notelist li{display:flex;gap:8px;padding:4px 0}
+  .pin-ic{color:var(--indigo);font-weight:800;flex:none}
+  .principle{margin-top:14px;background:#f4f4ff;border:1px solid #ddddfb;border-radius:10px;
+    padding:11px 13px;font-size:13px;color:#2f3060}
+
+  /* ---------- generic tables ---------- */
+  table.t{width:100%;border-collapse:collapse;font-size:13px}
+  table.t caption{text-align:left;font-size:12.5px;color:var(--muted);padding-bottom:8px}
+  table.t th,table.t td{text-align:right;padding:9px 12px;border-top:1px solid var(--line);color:#33455b}
+  table.t th:first-child,table.t td:first-child{text-align:left}
+  table.t thead th{color:var(--muted);font-weight:600;border-top:0;white-space:nowrap}
+  table.t tbody th{font-weight:700;color:var(--ink)}
+  table.t td b{color:var(--ink)}
+
+  /* ---------- cost / headroom ---------- */
+  .costgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .cost{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fbfcfe}
+  .cost .k{font-size:12px;color:var(--muted)}
+  .cost .v{font-size:26px;font-weight:800;margin:4px 0 2px;letter-spacing:-.01em}
+  .cost .v .u{font-size:14px;font-weight:700;color:var(--muted)}
+  .cost .d{font-size:12.5px;color:#33455b}
+  .bound{margin-top:14px;background:var(--amber-bg);border:1px solid #ffe2ad;border-radius:10px;
+    padding:11px 13px;font-size:13px;color:var(--amber-ink)}
+  .bound b{color:#7a4600}
+
+  /* ---------- series ---------- */
+  .series{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:6px}
+  .sbook{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fbfcfe}
+  .sbook .n{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .sbook .ti{font-weight:700;font-size:14px;margin:3px 0 8px}
+  .sbook .row{display:flex;justify-content:space-between;font-size:12.5px;color:#33455b;padding:3px 0}
+  .sbook .row b{color:var(--ink)}
+  .arrowline{font-size:12.5px;color:#33455b;margin-top:12px}
+
+  /* ---------- sparklines ---------- */
+  .sparks{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .spark{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fbfcfe}
+  .spark .k{font-size:12.5px;color:var(--muted)}
+  .spark .v{font-size:24px;font-weight:800;margin:2px 0 6px}
+  .spark .v .u{font-size:13px;font-weight:700;color:var(--muted)}
+  .spark svg{width:100%;height:auto;display:block}
+  .spark .f{font-size:11.5px;color:var(--muted);margin-top:6px}
+  .empty{border:1px dashed #cfd8e3;border-radius:12px;padding:18px 16px;background:#f7f9fc;
+    display:flex;flex-direction:column;justify-content:center;gap:6px;text-align:center;margin-top:14px}
+  .empty .ic{font-size:18px;color:var(--muted)}
+  .empty .t{font-weight:700;font-size:13.5px}
+  .empty .d{font-size:12.5px;color:var(--muted)}
+
+  /* ---------- privacy ---------- */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .panel{border-radius:12px;padding:16px 18px;border:1px solid var(--line)}
+  .panel.see{background:var(--green-soft);border-color:#bfe3c9}
+  .panel.no{background:var(--red-soft);border-color:#f3c9c4}
+  .panel h3{margin:0 0 4px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .panel.see h3{color:#146c2e}.panel.no h3{color:#8f1d14}
+  .panel p.cap{margin:0 0 10px;font-size:12.5px;color:var(--muted)}
+  .panel ul{margin:0;padding:0;list-style:none}
+  .panel li{display:flex;gap:9px;padding:6px 0;font-size:13.5px;border-top:1px solid rgba(0,0,0,.06);color:#33455b}
+  .panel li:first-child{border-top:0}
+  .yes{color:var(--green);font-weight:800;flex:none}
+  .no-ic{color:var(--red);font-weight:800;flex:none}
+  .ph{font-family:var(--mono);font-size:12px;background:#fff;border:1px dashed var(--red);
+    border-radius:5px;padding:0 5px;color:var(--red)}
+  .redact{margin-top:16px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .redact .rh{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    padding:10px 14px;background:#fbfcfe;border-bottom:1px solid var(--line);font-size:13px;color:#33455b}
+  .redact .stamp{font-size:11px;font-weight:800;color:var(--red);background:var(--red-soft);
+    border:1px solid #f3c9c4;border-radius:999px;padding:3px 10px;letter-spacing:.03em}
+  table.rt{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.rt th,table.rt td{text-align:left;padding:8px 14px;border-top:1px solid var(--line);color:#33455b}
+  table.rt thead th{color:var(--muted);font-weight:600;background:#fff;border-top:0}
+  .blurred{filter:blur(4.5px);-webkit-user-select:none;user-select:none;pointer-events:none}
+  .readernote{margin-top:14px;font-size:12.5px;color:#33455b;background:#f7f9fc;
+    border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+
+  /* ---------- caveats ---------- */
+  ol.cav{margin:0;padding-left:22px}
+  ol.cav li{font-size:13px;color:#33455b;padding:5px 0}
+  ol.cav li b{color:var(--ink)}
+  .tables{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .tables code{background:#0f1b2d;color:#a8ede6;font-size:12px;padding:4px 9px;border-radius:6px;
+    font-family:var(--mono)}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-height:1.75}
+
+  @media (max-width:860px){
+    .herostats,.costgrid,.sparks,.series{grid-template-columns:1fr}
+    .split{grid-template-columns:1fr}
+    .book{flex-direction:column}
+    .lead{font-size:22px}
+    .frow{grid-template-columns:1fr;gap:8px}
+    .frow .fr{text-align:left}
+    .tick::after{top:-16px}
+  }
+</style>
+</head>
+<body>
+
+<div class="banner">Prototype for discussion. <b>All figures are illustrative and are not queried from production reader data.</b></div>
+
+<header class="nav">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 5.5C3 5.5 6 4 9 5.5V19C6 17.5 3 19 3 19V5.5Z" fill="#fff" opacity=".92"/><path d="M21 5.5C21 5.5 18 4 15 5.5V19C18 17.5 21 19 21 19V5.5Z" fill="#fff" opacity=".7"/><path d="M4 15.5L8 11.5L11 13.5L15 8.5L20 6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </span>
+    Reading Insights
+  </div>
+  <span class="tag">KDP · Pilot · Top titles</span>
+</header>
+
+<div class="wrap">
+
+  <!-- 3. BOOK HEADER -->
+  <div class="book">
+    <div class="cover" role="img" aria-label="Mock cover: The Housemaid by Freida McFadden, Kindle Unlimited">
+      <div class="ribbon" aria-hidden="true">KU</div>
+      <div class="kw">Kindle Edition</div>
+      <div><div class="ct">THE<br>HOUSEMAID</div></div>
+      <div class="ca">FREIDA McFADDEN</div>
+    </div>
+    <div class="meta">
+      <h1>The Housemaid</h1>
+      <div class="byline">Freida McFadden · Psychological thriller</div>
+      <div class="chips">
+        <span class="chip">ASIN <b>B09TWSRMCB</b></span>
+        <span class="chip ku">Kindle Unlimited</span>
+        <span class="chip">KENPC <b>355</b> standardized pages</span>
+        <span class="chip"><b>50</b> chapters</span>
+        <span class="chip"><b>184,300</b> borrows</span>
+        <span class="chip">US · Jan–Jun 2026</span>
+      </div>
+      <div class="switcher">
+        <label for="titlePick">Title</label>
+        <select id="titlePick">
+          <option selected>The Housemaid</option>
+          <option>The Housemaid&#8217;s Secret</option>
+          <option>The Teacher</option>
+        </select>
+        <span class="note">Switching titles is not wired up in this prototype.</span>
+      </div>
+      <p class="sub" style="margin:12px 0 0">
+        Every figure below is aggregated across many readers. No individual reader appears anywhere in this page.
+        Positions are measured on the standardized KU page scale, starting at the Start Reading Location.
+      </p>
+    </div>
+  </div>
+
+  <!-- 4. HERO FINDING -->
+  <section class="hero" aria-labelledby="heroH">
+    <div class="kicker">What the data says</div>
+    <h2 id="heroH" class="lead">
+      Readers who get past the first 10% <span class="hi">mostly finish</span>. This book loses more readers in
+      <span class="hi">Chapter 12</span> than anywhere else after the opening.
+    </h2>
+    <p class="lead-sub">
+      Of 171,400 readers who opened the book, 68.0% carried past the first 10%. Of those, 67.6% reached the last page.
+      The one exception to an otherwise flat middle is a single step down in Chapter 12.
+    </p>
+    <div class="herostats">
+      <div class="hs">
+        <div class="k">Finish rate, of readers who opened</div>
+        <div class="v">46<span class="u">%</span></div>
+        <div class="d"><span class="delta up">▲ +8 pts</span> vs comparable titles (38%)</div>
+      </div>
+      <div class="hs">
+        <div class="k">Steepest drop after the opening</div>
+        <div class="v">Ch. 12</div>
+        <div class="d"><span class="delta down">▼ −8.2 pts</span> pages 78–85</div>
+      </div>
+      <div class="hs">
+        <div class="k">Series read-through, book 1 to book 2</div>
+        <div class="v">61<span class="u">%</span></div>
+        <div class="d"><span class="delta up">▲ +17 pts</span> vs comparable series (44%)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. FUNNEL -->
+  <section aria-labelledby="funH">
+    <div class="sh">
+      <div>
+        <h2 id="funH">From borrow to the next book</h2>
+        <p class="sub" style="margin:3px 0 0">Five stages, all counted against the same 184,300 borrows. The grey mark on each bar is where comparable titles sit.</p>
+      </div>
+      <p class="note"><span class="swatch" style="background:var(--teal)"></span>This book &nbsp; <span class="swatch" style="background:var(--slate)"></span>Comparable titles</p>
+    </div>
+
+    <div class="funnel">
+      <div class="frow">
+        <div class="fl">
+          <div class="name">Borrowed</div>
+          <div class="cnt">184,300 readers</div>
+          <div class="conv">Starting population</div>
+        </div>
+        <div class="track"><div class="fill" style="width:100%">100% of borrows</div></div>
+        <div class="fr">No comparison at this stage</div>
+      </div>
+      <p class="loss"><span class="dn">▼</span><span><b>12,900</b> borrowed it and never opened it.</span></p>
+
+      <div class="frow">
+        <div class="fl">
+          <div class="name">Opened</div>
+          <div class="cnt">171,400 readers</div>
+          <div class="conv">93.0% of borrowers opened the book</div>
+        </div>
+        <div class="track">
+          <div class="fill" style="width:93%">93.0% of borrows</div>
+          <div class="tick" style="left:89%" data-lab="comp 89%"></div>
+        </div>
+        <div class="fr"><span class="delta up">▲ +4 pts</span><br>vs comp 89% of borrows</div>
+      </div>
+      <p class="loss"><span class="dn">▼</span><span><b>54,800</b> opened it and stopped inside the first 10%.</span></p>
+
+      <div class="frow">
+        <div class="fl">
+          <div class="name">Past first 10%</div>
+          <div class="cnt">116,600 readers</div>
+          <div class="conv">68.0% of readers who opened carried on</div>
+        </div>
+        <div class="track">
+          <div class="fill" style="width:63.3%">63.3% of borrows</div>
+          <div class="tick" style="left:54.3%" data-lab="comp 54%"></div>
+        </div>
+        <div class="fr"><span class="delta up">▲ +7 pts</span><br>vs comp 61% of readers who opened</div>
+      </div>
+      <p class="loss"><span class="dn">▼</span><span><b>37,800</b> got past the first 10% and did not finish.</span></p>
+
+      <div class="frow">
+        <div class="fl">
+          <div class="name">Finished</div>
+          <div class="cnt">78,800 readers</div>
+          <div class="conv">67.6% of readers past 10% reached the end</div>
+        </div>
+        <div class="track">
+          <div class="fill" style="width:42.8%">42.8% of borrows</div>
+          <div class="tick" style="left:33.8%" data-lab="comp 34%"></div>
+        </div>
+        <div class="fr"><span class="delta up">▲ +8 pts</span><br>vs comp 38% of readers who opened</div>
+      </div>
+      <p class="loss"><span class="dn">▼</span><span><b>30,700</b> finished this book and have not started book 2.</span></p>
+
+      <div class="frow">
+        <div class="fl">
+          <div class="name">Started book 2</div>
+          <div class="cnt">48,100 readers</div>
+          <div class="conv">61.0% of finishers went on to book 2</div>
+        </div>
+        <div class="track">
+          <div class="fill thin" style="width:26.1%">26.1% of borrows</div>
+          <div class="tick" style="left:18.8%" data-lab="comp 19%"></div>
+        </div>
+        <div class="fr"><span class="delta up">▲ +17 pts</span><br>vs comp 44% of finishers</div>
+      </div>
+    </div>
+
+    <p class="cohortdef">
+      <b>Comparable titles</b> means 1,240 titles: psychological thriller, 300–400 standardized KU pages, enrolled in
+      Kindle Unlimited, within their first 18 months after publication. The cohort is never a single named title.
+    </p>
+  </section>
+
+  <!-- 6. READ-THROUGH CURVE -->
+  <section aria-labelledby="curveH">
+    <div class="sh">
+      <div>
+        <h2 id="curveH">Read-through curve</h2>
+        <p class="sub" style="margin:3px 0 0">Share of readers who opened the book and are still reading at each position. The chart shows where readers stop. It does not know what happens there.</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="seg" role="group" aria-label="X axis unit">
+        <button type="button" id="axChapter" aria-pressed="true">Chapter</button>
+        <button type="button" id="axPage" aria-pressed="false">Page</button>
+        <button type="button" id="axPercent" aria-pressed="false">Percent</button>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="tgComp" checked />
+          <span class="swatch" style="background:var(--slate)"></span> Comparable titles (dashed)</label>
+        <label><input type="checkbox" id="tgOther" />
+          <span class="swatch" style="background:var(--indigo)"></span> Your other title: The Teacher</label>
+      </div>
+    </div>
+
+    <div class="chartwrap">
+      <svg class="chart" id="chart" viewBox="0 0 980 360" tabindex="0" role="img"
+        aria-label="Read-through curve for The Housemaid. 100% of readers at the start, 68% at the 10% mark, 46% at the end. The steepest drop after the opening is in Chapter 12."
+        aria-describedby="curveReadout"></svg>
+      <div class="tip" id="tip" aria-hidden="true"></div>
+    </div>
+
+    <div class="readout" id="curveReadout" role="status" aria-live="polite"></div>
+    <p class="kbdhint">
+      Keyboard: focus the chart, then <kbd>←</kbd> <kbd>→</kbd> to move 1%, <kbd>Shift</kbd> + arrow for 5%,
+      <kbd>Home</kbd> and <kbd>End</kbd> for the ends.
+    </p>
+    <p class="soft" style="margin-top:12px">
+      <b>About the first 10% band.</b> 10% is the Kindle Unlimited threshold used here for the opening stretch. It is
+      related to the free sample but not the same thing. Sample length varies by title, so a reader stopping in this
+      band has not necessarily stopped at the end of a sample.
+    </p>
+
+    <div class="vh">
+      <table class="t">
+        <caption>Read-through data, percent of readers who opened still reading at each position</caption>
+        <thead><tr><th scope="col">Position (% of book)</th><th scope="col">Chapter</th><th scope="col">Standardized page</th><th scope="col">The Housemaid</th><th scope="col">Comparable titles</th><th scope="col">The Teacher</th></tr></thead>
+        <tbody id="curveTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 7. ENGAGEMENT -->
+  <section aria-labelledby="engH">
+    <div class="engbar">
+      <div>
+        <h2 id="engH">Reading pace, same positions</h2>
+        <p class="sub" style="margin:3px 0 0">Reading time per page as an index. 100 is this book&#8217;s own average pace. Above 100 means readers slowed down.</p>
+      </div>
+      <button type="button" class="btn" id="addNoteBtn" aria-pressed="false">+ Add a note</button>
+    </div>
+
+    <div class="chartwrap">
+      <svg class="chart" id="eng" viewBox="0 0 980 150" tabindex="0" role="img"
+        aria-label="Reading pace index across the book. Index 100 is this book's average reading time per page. The lowest pace is around 20% of the book, the highest around 88%."
+        aria-describedby="engReadout"></svg>
+      <div class="noteinput" id="noteInput">
+        <span class="h" id="noteAt">at</span>
+        <input type="text" id="noteText" maxlength="48" placeholder="Your note" aria-label="Note text" />
+        <span class="h">Enter saves, Esc cancels</span>
+      </div>
+    </div>
+
+    <div class="readout" id="engReadout" role="status" aria-live="polite"></div>
+
+    <div class="notelist">
+      <strong style="font-size:13px">Author notes</strong>
+      <span class="note">Added by you. Nothing here is generated from the data.</span>
+      <ul id="noteList"></ul>
+    </div>
+
+    <p class="principle">
+      Readers slowing down is what the data sees. What happens on those pages is what only you know. Reading Insights
+      points at positions. You supply the meaning.
+    </p>
+
+    <div class="vh">
+      <table class="t">
+        <caption>Reading pace index by position, 100 equals this book&#8217;s average</caption>
+        <thead><tr><th scope="col">Position (% of book)</th><th scope="col">Chapter</th><th scope="col">Pace index</th></tr></thead>
+        <tbody id="engTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 8. WHAT THE DROP COSTS -->
+  <section class="provisional" aria-labelledby="costH">
+    <div class="sh">
+      <div>
+        <h2 id="costH">What the Chapter 12 drop costs</h2>
+        <p class="sub" style="margin:3px 0 0">The same drop, expressed in Kindle Unlimited pages read.</p>
+      </div>
+      <span class="flag open">Nice to have · scope to be decided with Product</span>
+    </div>
+    <div class="costgrid">
+      <div class="cost">
+        <div class="k">Pages read in the window</div>
+        <div class="v">33.6<span class="u">M</span></div>
+        <div class="d">Jan–Jun 2026, US</div>
+      </div>
+      <div class="cost">
+        <div class="k">Headroom if Ch. 12 held at this book&#8217;s own average</div>
+        <div class="v">≈3.5<span class="u">M</span></div>
+        <div class="d">additional KU pages</div>
+      </div>
+      <div class="cost">
+        <div class="k">Relative to what the title earned</div>
+        <div class="v">≈10<span class="u">%</span></div>
+        <div class="d">above the window&#8217;s earnings</div>
+      </div>
+    </div>
+    <p class="bound">
+      <b>An upper bound, not a forecast.</b> It assumes readers retained through Chapter 12 go on to read like readers
+      who already got past it. Some would have stopped later anyway. Treat it as the size of the opportunity, not the
+      size of the gain.
+      <b>Whether to show authors a figure like this at all is still open</b>, as is which counterfactual it should rest
+      on. That is a product call, not an analytics one, so this panel sits outside the pilot until Product decides.
+    </p>
+  </section>
+
+  <!-- 9. COMPARE YOUR TITLES -->
+  <section aria-labelledby="cmpH">
+    <div class="sh">
+      <div>
+        <h2 id="cmpH">Compare your titles</h2>
+        <p class="sub" style="margin:3px 0 0">Both titles measured over their <b>first 90 days after publication</b>. Comparing a two-year-old title against a three-month-old one would not mean anything, so the window is aligned.</p>
+      </div>
+    </div>
+    <table class="t">
+      <caption>First 90 days after publication, US, Kindle Unlimited borrows</caption>
+      <thead>
+        <tr><th scope="col">Stage</th><th scope="col">The Housemaid</th><th scope="col">The Teacher</th><th scope="col">Difference</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Opened, of borrows</th><td>93.0%</td><td>92.4%</td><td>−0.6 pts</td></tr>
+        <tr><th scope="row">Past first 10%, of opened</th><td><b>68.0%</b></td><td>64.0%</td><td>−4.0 pts</td></tr>
+        <tr><th scope="row">Finished, of opened</th><td>46.0%</td><td><b>47.0%</b></td><td>+1.0 pts</td></tr>
+        <tr><th scope="row">Series read-through, book 1 to book 2</th><td><b>61.0%</b></td><td>Not in a series</td><td>Not comparable</td></tr>
+      </tbody>
+    </table>
+    <p class="soft" style="margin-top:14px">
+      The Teacher has the worse opening. It loses 4 more points inside the first 10%. After that it has no mid-book
+      step down of the kind this book has in Chapter 12, and it ends 1 point higher at 47%. Two different problems:
+      one is an opening problem, the other is a Chapter 12 problem.
+    </p>
+  </section>
+
+  <!-- 10. SERIES READ-THROUGH -->
+  <section aria-labelledby="serH">
+    <div class="sh">
+      <div>
+        <h2 id="serH">Series read-through</h2>
+        <p class="sub" style="margin:3px 0 0">Readers carrying from one book of your own series into the next.</p>
+      </div>
+      <span class="flag lift">Wanted · heaviest data lift</span>
+    </div>
+    <div class="series">
+      <div class="sbook">
+        <div class="n">Book 1</div>
+        <div class="ti">The Housemaid</div>
+        <div class="row"><span>Finished</span><b>78,800</b></div>
+        <div class="row"><span>Went on to book 2</span><b>48,100</b></div>
+        <div class="row"><span>Read-through</span><b>61.0%</b></div>
+      </div>
+      <div class="sbook">
+        <div class="n">Book 2</div>
+        <div class="ti">The Housemaid&#8217;s Secret</div>
+        <div class="row"><span>Started</span><b>48,100</b></div>
+        <div class="row"><span>Finished</span><b>34,600</b></div>
+        <div class="row"><span>Finish rate of starters</span><b>71.9%</b></div>
+      </div>
+      <div class="sbook">
+        <div class="n">Book 3</div>
+        <div class="ti">The Housemaid Is Watching</div>
+        <div class="row"><span>Started</span><b>26,300</b></div>
+        <div class="row"><span>Of book 2 finishers</span><b>76.0%</b></div>
+        <div class="row"><span>Comparable series, book 1 to 2</span><b>44.0%</b></div>
+      </div>
+    </div>
+    <p class="arrowline">
+      78,800 finished book 1 → 48,100 started book 2 (61.0%) → 34,600 finished book 2 → 26,300 started book 3
+      (76.0% of book 2 finishers). Comparable series carry 44.0% from book 1 into book 2.
+    </p>
+    <p class="bound" style="margin-top:12px">
+      <b>Read this panel with the most caution.</b> It depends on series metadata. Independently published series
+      often have series fields unset or ordered inconsistently, so book order cannot always be trusted. This is the
+      part of the concept that needs the most work before it could ship.
+    </p>
+  </section>
+
+  <!-- 11. MONTH TO MONTH -->
+  <section aria-labelledby="momH">
+    <div class="sh">
+      <div>
+        <h2 id="momH">Month to month</h2>
+        <p class="sub" style="margin:3px 0 0">Jan–Jun 2026. Single numbers only. Curves are not compared month over month because a revision can move the page ruler underneath them.</p>
+      </div>
+    </div>
+    <div class="sparks" id="sparks"></div>
+    <div class="empty">
+      <div class="ic" aria-hidden="true">▨</div>
+      <div class="t">Not enough readers to report</div>
+      <div class="d">
+        This breakdown rests on fewer than <span class="ph">N</span> readers, so it is suppressed. N is a policy
+        placeholder in this prototype and has not been agreed.
+      </div>
+    </div>
+  </section>
+
+  <!-- 12. PRIVACY -->
+  <section aria-labelledby="privH">
+    <div class="sh">
+      <div>
+        <h2 id="privH">What you see, and what you never see</h2>
+        <p class="sub" style="margin:3px 0 0">Reading Insights reports patterns across many readers. It does not report people.</p>
+      </div>
+    </div>
+    <div class="split">
+      <div class="panel see">
+        <h3><span aria-hidden="true">✔</span> You can see</h3>
+        <p class="cap">Aggregated across many readers, with small groups suppressed.</p>
+        <ul>
+          <li><span class="yes" aria-hidden="true">✔</span> The aggregated read-through curve for your title</li>
+          <li><span class="yes" aria-hidden="true">✔</span> Where drop-off concentrates, by chapter or by page</li>
+          <li><span class="yes" aria-hidden="true">✔</span> The share who borrowed the book and never opened it</li>
+          <li><span class="yes" aria-hidden="true">✔</span> Month-to-month movement on these numbers</li>
+          <li><span class="yes" aria-hidden="true">✔</span> Read-through into the next book of your own series</li>
+          <li><span class="yes" aria-hidden="true">✔</span> Benchmarks against a cohort of comparable titles, never a named title</li>
+        </ul>
+      </div>
+      <div class="panel no">
+        <h3><span aria-hidden="true">🔒</span> You never see</h3>
+        <p class="cap">Reader-level data does not leave the aggregate.</p>
+        <ul>
+          <li><span class="no-ic" aria-hidden="true">✕</span> Any individual reader, or anything traceable to one</li>
+          <li><span class="no-ic" aria-hidden="true">✕</span> A named reader&#8217;s progress, highlights, notes or bookmarks</li>
+          <li><span class="no-ic" aria-hidden="true">✕</span> Reader age, gender, or location finer than marketplace</li>
+          <li><span class="no-ic" aria-hidden="true">✕</span> Anything a reader read outside your own titles</li>
+          <li><span class="no-ic" aria-hidden="true">✕</span> A named competitor&#8217;s curve</li>
+          <li><span class="no-ic" aria-hidden="true">✕</span> Any figure resting on fewer than <span class="ph">N</span> readers. N is a policy placeholder and has not been agreed.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="redact">
+      <div class="rh">
+        <span>Reader-level rows, the raw shape the curve is built from</span>
+        <span class="stamp">🔒 NOT AVAILABLE TO AUTHORS</span>
+      </div>
+      <table class="rt" aria-hidden="true">
+        <thead><tr><th>Reader</th><th>Reached</th><th>Time reading</th><th>Device</th><th>Also read</th></tr></thead>
+        <tbody class="blurred" inert>
+          <tr><td>placeholder-aaaa</td><td>xx% (placeholder)</td><td>x h xx m</td><td>placeholder device</td><td>placeholder</td></tr>
+          <tr><td>placeholder-bbbb</td><td>xx% (placeholder)</td><td>x h xx m</td><td>placeholder device</td><td>placeholder</td></tr>
+          <tr><td>placeholder-cccc</td><td>xx% (placeholder)</td><td>x h xx m</td><td>placeholder device</td><td>placeholder</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="readernote">
+      <b>For readers.</b> Nothing here identifies you. Authors see how a large group of readers moved through a book,
+      the same kind of aggregate signal Kindle already surfaces publicly through Popular Highlights.
+    </p>
+  </section>
+
+  <!-- 13. METHODOLOGY -->
+  <section aria-labelledby="methH">
+    <div class="sh">
+      <div>
+        <h2 id="methH">Methodology and caveats</h2>
+        <p class="sub" style="margin:3px 0 0">The limits are on the page, not in a footnote.</p>
+      </div>
+    </div>
+    <ol class="cav">
+      <li><b>Pilot covers top titles only.</b> Low-volume titles are suppressed.</li>
+      <li><b>Kindle Unlimited borrowers, not buyers.</b> Reading on purchased copies is technically reachable but is out of scope for the pilot.</li>
+      <li><b>Positions are standardized KU pages (KENPC)</b> measured from the Start Reading Location. They are not manuscript pages and not print pages.</li>
+      <li><b>Revising and re-uploading recalculates KENPC</b>, which moves the ruler. Curves on either side of a revision are not directly comparable.</li>
+      <li><b>In-progress reads look like drop-offs.</b> Only borrows older than 30 days are counted.</li>
+      <li><b>First-time pages only.</b> Re-reads are excluded, and there is a 3,000-page cap per reader per title.</li>
+      <li><b>Whispersync syncs the furthest location on reconnect</b>, so read depth can be overstated.</li>
+      <li><b>The most recent period is incomplete.</b> Reading and royalty data settles about 45 days after month end.</li>
+      <li><b>The comparable-titles cohort has a minimum size</b>, and its definition is shown on screen so the comparison can be judged.</li>
+      <li><b>Series read-through depends on series metadata.</b> Ordering is unreliable where series fields are unset.</li>
+      <li><b>Every figure on this page is illustrative.</b></li>
+    </ol>
+    <p class="sub" style="margin:16px 0 4px"><b>Where the real numbers would come from</b></p>
+    <div class="tables">
+      <code>kcm_ddl.txn_nrs_read_events</code>
+      <code>crm_bi_ddl.kbr_loans</code>
+      <code>kdp_ddl.kix_kenpc</code>
+      <code>kdp_ddl.kdp_loan_details</code>
+      <code>kcm_ddl.dim_kindle_book</code>
+    </div>
+  </section>
+
+  <footer>
+    Reading Insights, prototype v2. The Housemaid (B09TWSRMCB) is used as an illustrative example.<br>
+    Figures are mocked for discussion. Data model and caveats are grounded in the analytics team&#8217;s knowledge base.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     DATA
+     ============================================================ */
+  var KENPC = 355, NCH = 50;
+
+  var S_BOOK = [[0,100],[2.3,95],[5,88],[7.9,80],[10.1,68],[12.4,65.5],[15.2,64],[18,63],[20.8,62.2],
+    [22,62],[23.9,53.8],[26.8,53],[31,52.3],[36.6,51.6],[42.3,51],[47.9,50.4],[53.5,49.9],[59.2,49.4],
+    [64.8,49],[70.4,48.6],[76.1,48.2],[81.7,47.8],[87.3,47.4],[93,47],[97.2,46.5],[100,46]];
+
+  var S_COMP = [[0,100],[2.3,93],[5,84],[7.9,74],[10.1,61],[14,58],[22.5,55],[33.8,52],[45,48],
+    [56.3,45],[67.6,43],[78.9,41],[90.1,39.5],[100,38]];
+
+  var S_OTHER = [[0,100],[2.3,94],[5,86],[7.9,77],[10.1,64],[15,61],[25,58.5],[35,57],[45,55.5],
+    [55,54],[65,52.5],[75,51],[85,49.5],[95,48],[100,47]];
+
+  var S_ENG = [[0,88],[5,95],[10,104],[15,72],[20,68],[22,66],[24,70],[30,86],[40,98],[50,110],
+    [58,124],[65,118],[72,108],[80,116],[88,136],[95,120],[100,102]];
+
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun"];
+  var SPARKS = [
+    {k:"Finish rate",      u:"%", v:[44.8,45.1,45.6,46.2,46.4,46.0]},
+    {k:"Past first 10%",   u:"%", v:[66.4,66.9,67.3,68.1,68.4,68.0]},
+    {k:"Never opened",     u:"%", v:[7.6,7.4,7.2,7.0,6.9,7.0]}
+  ];
+
+  /* ============================================================
+     CHAPTER MODEL — deterministic, mild length variance,
+     normalized so ch.1 starts at page 0 and the book ends at 355.
+     ============================================================ */
+  var chStart = (function(){
+    var raw = [], i, w, total = 0;
+    for(i=0;i<NCH;i++){
+      // deterministic mild variance around 1.0 (chapters run ~5.8 to ~8.4 pages).
+      // Tuned so chapter 12 spans pages 78-86, matching the mocked drop position.
+      w = 1 + 0.08*Math.sin(i*1.15) + 0.10*Math.cos(i*1.1);
+      raw.push(w); total += w;
+    }
+    var starts = [], acc = 0;
+    for(i=0;i<NCH;i++){ starts.push(acc/total*KENPC); acc += raw[i]; }
+    starts.push(KENPC); // sentinel: end of book
+    return starts;
+  })();
+
+  function chapterStartPage(n){                 // n is 1-based
+    if(n<1) n=1; if(n>NCH) n=NCH;
+    return chStart[n-1];
+  }
+  function pageToChapter(page){
+    if(page<=0) return 1;
+    if(page>=KENPC) return NCH;
+    for(var i=NCH-1;i>=0;i--){ if(page>=chStart[i]) return i+1; }
+    return 1;
+  }
+  function pctToPage(p){ return p/100*KENPC; }
+  function pageToPct(pg){ return pg/KENPC*100; }
+  function pctToChapter(p){ return pageToChapter(pctToPage(p)); }
+
+  // Ch.12 cliff: mock data places the step at 22% -> 23.9%
+  var CLIFF_PCT = 23.9, CLIFF_FROM = 22;
+
+  /* ============================================================
+     SVG helpers
+     ============================================================ */
+  var NS = "http://www.w3.org/2000/svg";
+  function el(name, attrs, text){
+    var e = document.createElementNS(NS,name);
+    if(attrs) for(var k in attrs) e.setAttribute(k, attrs[k]);
+    if(text != null) e.textContent = text;
+    return e;
+  }
+  function fmt(n){ return n.toLocaleString("en-US"); }
+  function interp(series, p){
+    if(p <= series[0][0]) return series[0][1];
+    var last = series[series.length-1];
+    if(p >= last[0]) return last[1];
+    for(var i=0;i<series.length-1;i++){
+      var a = series[i], b = series[i+1];
+      if(p >= a[0] && p <= b[0]){
+        var f = (b[0]-a[0]) === 0 ? 0 : (p-a[0])/(b[0]-a[0]);
+        return a[1] + f*(b[1]-a[1]);
+      }
+    }
+    return last[1];
+  }
+
+  /* ============================================================
+     SHARED GEOMETRY (curve + engagement share l/r margins)
+     ============================================================ */
+  var M = {l:56, r:112};
+  var CW = 980, CH = 360, CT = 34, CB = 34;
+  var cPlotW = CW - M.l - M.r;
+  var cPlotH = CH - CT - CB;
+  function cX(p){ return M.l + (p/100)*cPlotW; }
+  function cY(v){ return CT + (1 - v/100)*cPlotH; }
+
+  var EW = 980, EH = 150, ET = 16, EB = 30;
+  var ePlotW = EW - M.l - M.r;      // identical plot width -> aligned x axis
+  var ePlotH = EH - ET - EB;
+  var ELO = 50, EHI = 150;
+  function eX(p){ return M.l + (p/100)*ePlotW; }
+  function eY(v){ return ET + (1 - (v-ELO)/(EHI-ELO))*ePlotH; }
+
+  /* ============================================================
+     AXIS MODES
+     ============================================================ */
+  var AXES = {
+    chapter: {
+      title: "Chapter (standardized KU pages, from Start Reading Location)",
+      ticks: function(){
+        return [1,10,20,30,40,50].map(function(c){
+          return {p: pageToPct(chapterStartPage(c)), label: String(c)};
+        });
+      },
+      readAt: function(p){ return "Chapter " + pctToChapter(p); }
+    },
+    page: {
+      title: "Standardized KU page (KENPC 355, from Start Reading Location)",
+      ticks: function(){
+        return [0,50,100,150,200,250,300,355].map(function(pg){
+          return {p: pageToPct(pg), label: String(pg)};
+        });
+      },
+      readAt: function(p){ return "Page " + Math.round(pctToPage(p)); }
+    },
+    percent: {
+      title: "Position in book (percent of standardized KU pages, from Start Reading Location)",
+      ticks: function(){
+        return [0,10,25,50,75,100].map(function(v){
+          return {p: v, label: v + "%"};
+        });
+      },
+      readAt: function(p){ return Math.round(p) + "% of the book"; }
+    }
+  };
+  var axisMode = "chapter";
+  var showComp = true, showOther = false;
+
+  /* ============================================================
+     RETENTION CHART
+     ============================================================ */
+  var svg = document.getElementById("chart");
+  var tip = document.getElementById("tip");
+  var readout = document.getElementById("curveReadout");
+
+  var gStatic, gLines, gAnno, gHover, guide, dots = {}, endLabels = {};
+
+  function poly(series, xf, yf){
+    return series.map(function(d){ return xf(d[0]).toFixed(1) + "," + yf(d[1]).toFixed(1); }).join(" ");
+  }
+
+  function drawChart(){
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // gradient for area fill
+    var defs = el("defs");
+    var g = el("linearGradient",{id:"tealArea",x1:"0",y1:"0",x2:"0",y2:"1"});
+    g.appendChild(el("stop",{offset:"0%","stop-color":"#0b8a84","stop-opacity":".22"}));
+    g.appendChild(el("stop",{offset:"100%","stop-color":"#0b8a84","stop-opacity":".02"}));
+    defs.appendChild(g);
+    svg.appendChild(defs);
+
+    // first-10% band
+    svg.appendChild(el("rect",{x:cX(0),y:CT,width:cX(10)-cX(0),height:cPlotH,
+      fill:"#d97706","fill-opacity":".07"}));
+    svg.appendChild(el("line",{x1:cX(10),y1:CT,x2:cX(10),y2:CT+cPlotH,
+      stroke:"#d97706","stroke-width":1,"stroke-dasharray":"4 3","stroke-opacity":".7"}));
+    svg.appendChild(el("text",{x:(cX(0)+cX(10))/2, y:CT+cPlotH-8, "text-anchor":"middle",
+      fill:"#a85d00","font-size":"10.5","font-weight":"700","letter-spacing":".06em"}, "FIRST 10%"));
+
+    // gridlines + y labels
+    [0,25,50,75,100].forEach(function(v){
+      svg.appendChild(el("line",{x1:M.l,y1:cY(v),x2:CW-M.r,y2:cY(v),
+        stroke:"#e8edf3","stroke-width":1}));
+      svg.appendChild(el("text",{x:M.l-10,y:cY(v)+4,"text-anchor":"end",
+        fill:"#8b98a8","font-size":"11"}, v+"%"));
+    });
+    svg.appendChild(el("text",{x:14,y:CT+cPlotH/2,"text-anchor":"middle",
+      fill:"#5b6b7f","font-size":"11","font-weight":"600",
+      transform:"rotate(-90 14 "+(CT+cPlotH/2)+")"}, "% still reading"));
+
+    // x ticks + axis title
+    AXES[axisMode].ticks().forEach(function(t){
+      svg.appendChild(el("line",{x1:cX(t.p),y1:CT+cPlotH,x2:cX(t.p),y2:CT+cPlotH+5,
+        stroke:"#c3ccd6","stroke-width":1}));
+      svg.appendChild(el("text",{x:cX(t.p),y:CT+cPlotH+18,"text-anchor":"middle",
+        fill:"#8b98a8","font-size":"11"}, t.label));
+    });
+    svg.appendChild(el("text",{x:M.l+cPlotW/2,y:CH-2,"text-anchor":"middle",
+      fill:"#5b6b7f","font-size":"11.5","font-weight":"600"}, AXES[axisMode].title));
+
+    // area under this book (straight segments, no smoothing)
+    var areaPts = poly(S_BOOK,cX,cY) + " " + cX(100).toFixed(1) + "," + cY(0).toFixed(1) +
+                  " " + cX(0).toFixed(1) + "," + cY(0).toFixed(1);
+    svg.appendChild(el("polygon",{points:areaPts,fill:"url(#tealArea)"}));
+
+    // comp cohort
+    if(showComp){
+      svg.appendChild(el("polyline",{points:poly(S_COMP,cX,cY),fill:"none",stroke:"#6b7c93",
+        "stroke-width":"2","stroke-dasharray":"7 5","stroke-linejoin":"round"}));
+    }
+    // other title
+    if(showOther){
+      svg.appendChild(el("polyline",{points:poly(S_OTHER,cX,cY),fill:"none",stroke:"#4f46e5",
+        "stroke-width":"2","stroke-linejoin":"round"}));
+    }
+    // this book (on top)
+    svg.appendChild(el("polyline",{points:poly(S_BOOK,cX,cY),fill:"none",stroke:"#0b8a84",
+      "stroke-width":"3","stroke-linejoin":"round","stroke-linecap":"round"}));
+
+    // end-of-line value labels in the right margin
+    function endLabel(series,color,name){
+      var v = series[series.length-1][1];
+      var y = cY(v);
+      svg.appendChild(el("line",{x1:cX(100),y1:y,x2:CW-M.r+8,y2:y,stroke:color,
+        "stroke-width":1,"stroke-opacity":".45"}));
+      svg.appendChild(el("text",{x:CW-M.r+12,y:y-1,fill:color,"font-size":"12.5",
+        "font-weight":"700"}, v.toFixed(0)+"%"));
+      svg.appendChild(el("text",{x:CW-M.r+12,y:y+12,fill:"#5b6b7f","font-size":"10.5"}, name));
+    }
+    if(showOther) endLabel(S_OTHER,"#4f46e5","The Teacher");
+    if(showComp)  endLabel(S_COMP,"#6b7c93","Comparable");
+    endLabel(S_BOOK,"#076e69","This book");
+
+    // Ch.12 cliff annotation — label near the point, clear of the FIRST 10% band label
+    var ax = cX(CLIFF_PCT), ay = cY(interp(S_BOOK,CLIFF_PCT));
+    var lx = ax + 14, ly = ay - 34;
+    svg.appendChild(el("line",{x1:ax,y1:ay-5,x2:lx-4,y2:ly+10,stroke:"#b42318",
+      "stroke-width":1.2,"stroke-opacity":".8"}));
+    svg.appendChild(el("circle",{cx:ax,cy:ay,r:"5",fill:"#fff",stroke:"#b42318","stroke-width":"2.6"}));
+    svg.appendChild(el("text",{x:lx,y:ly,fill:"#b42318","font-size":"12","font-weight":"700"},
+      "Steepest drop after the opening"));
+    svg.appendChild(el("text",{x:lx,y:ly+15,fill:"#8f1d14","font-size":"11.5"},
+      "Ch. 12, \u22128.2 pts"));
+
+    // hover / focus furniture
+    guide = el("line",{x1:M.l,y1:CT,x2:M.l,y2:CT+cPlotH,stroke:"#0b8a84","stroke-width":1,opacity:"0"});
+    svg.appendChild(guide);
+    dots = {};
+    ["other","comp","book"].forEach(function(key){
+      var c = key==="book" ? "#0b8a84" : (key==="comp" ? "#6b7c93" : "#4f46e5");
+      var d = el("circle",{r:"5",fill:c,stroke:"#fff","stroke-width":"2",opacity:"0"});
+      svg.appendChild(d); dots[key] = d;
+    });
+
+    var hit = el("rect",{x:M.l,y:CT,width:cPlotW,height:cPlotH,fill:"transparent"});
+    svg.appendChild(hit);
+    hit.addEventListener("mousemove", onMove);
+    hit.addEventListener("mouseleave", onLeave);
+    hit.addEventListener("touchmove", function(e){ onMove(e); e.preventDefault(); }, {passive:false});
+
+    updateCursor(pageToPct(cursorPage), false);
+  }
+
+  // The cursor lives on the grid of whole standardized pages (0..355). Both the
+  // pointer and the keyboard land on that grid, so the two paths always report
+  // the same numbers at the same position, and the readout never claims
+  // precision finer than one standardized page.
+  var cursorPage = Math.round(pctToPage(10.1));
+
+  function snapPage(p){ return Math.max(0, Math.min(KENPC, Math.round(pctToPage(p)))); }
+  function pageStep(pctStep){ return Math.max(1, Math.round(KENPC*pctStep/100)); }
+
+  function seriesReadout(p){
+    var b = interp(S_BOOK,p), c = interp(S_COMP,p), o = interp(S_OTHER,p);
+    var parts = [{n:"This book", v:b, col:"#076e69"}];
+    if(showComp) parts.push({n:"Comparable titles", v:c, col:"#6b7c93"});
+    if(showOther) parts.push({n:"The Teacher", v:o, col:"#4f46e5"});
+    return {b:b,c:c,o:o,parts:parts};
+  }
+
+  function updateCursor(p, showTip){
+    cursorPage = snapPage(p);
+    var cursorP = pageToPct(cursorPage);
+    var r = seriesReadout(cursorP);
+    var x = cX(cursorP);
+
+    if(guide){ guide.setAttribute("x1",x); guide.setAttribute("x2",x); guide.setAttribute("opacity","1"); }
+    if(dots.book){ dots.book.setAttribute("cx",x); dots.book.setAttribute("cy",cY(r.b)); dots.book.setAttribute("opacity","1"); }
+    if(dots.comp){ dots.comp.setAttribute("cx",x); dots.comp.setAttribute("cy",cY(r.c)); dots.comp.setAttribute("opacity", showComp?"1":"0"); }
+    if(dots.other){ dots.other.setAttribute("cx",x); dots.other.setAttribute("cy",cY(r.o)); dots.other.setAttribute("opacity", showOther?"1":"0"); }
+
+    var where = AXES[axisMode].readAt(cursorP);
+    var extra = axisMode === "chapter"
+      ? " (page " + Math.round(pctToPage(cursorP)) + ", " + Math.round(cursorP) + "%)"
+      : (axisMode === "page" ? " (chapter " + pctToChapter(cursorP) + ")"
+                             : " (chapter " + pctToChapter(cursorP) + ", page " + Math.round(pctToPage(cursorP)) + ")");
+    var dv = r.b - r.c;
+    var dtxt = (dv >= 0 ? "+" : "\u2212") + Math.abs(dv).toFixed(1) + " pts vs comparable titles";
+
+    var txt = where + extra + ". This book: <b>" + r.b.toFixed(1) + "% still reading</b>.";
+    if(showComp) txt += " Comparable titles: <b>" + r.c.toFixed(1) + "%</b>. Difference: <b>" + dtxt + "</b>.";
+    if(showOther) txt += " The Teacher: <b>" + r.o.toFixed(1) + "%</b>.";
+    readout.innerHTML = txt;
+
+    if(showTip){
+      var rect = svg.getBoundingClientRect();
+      var scale = CW / rect.width;
+      var html = '<div class="hd">' + where + '</div>';
+      r.parts.forEach(function(pp){
+        html += '<div class="r"><span>' + pp.n + '</span><span>' + pp.v.toFixed(1) + '%</span></div>';
+      });
+      if(showComp) html += '<div class="r"><span>vs comparable</span><span>' + dtxt.replace(" vs comparable titles","") + '</span></div>';
+      tip.innerHTML = html;
+      tip.style.left = (x/scale) + "px";
+      tip.style.top  = (cY(r.b)/scale) + "px";
+      tip.style.opacity = 1;
+    } else {
+      tip.style.opacity = 0;
+    }
+  }
+
+  function onMove(ev){
+    var rect = svg.getBoundingClientRect();
+    var clientX = (ev.clientX != null) ? ev.clientX : (ev.touches && ev.touches[0].clientX);
+    if(clientX == null) return;
+    var scale = CW / rect.width;
+    var sx = (clientX - rect.left) * scale;
+    var p = (sx - M.l) / cPlotW * 100;
+    updateCursor(p, true);
+  }
+  function onLeave(){
+    tip.style.opacity = 0;
+    if(guide) guide.setAttribute("opacity","0");
+    ["book","comp","other"].forEach(function(k){ if(dots[k]) dots[k].setAttribute("opacity","0"); });
+  }
+
+  svg.addEventListener("keydown", function(e){
+    var step = pageStep(e.shiftKey ? 5 : 1), handled = true;
+    if(e.key === "ArrowRight") updateCursor(pageToPct(cursorPage + step), false);
+    else if(e.key === "ArrowLeft") updateCursor(pageToPct(cursorPage - step), false);
+    else if(e.key === "Home") updateCursor(0, false);
+    else if(e.key === "End") updateCursor(100, false);
+    else handled = false;
+    if(handled) e.preventDefault();
+  });
+  svg.addEventListener("focus", function(){ updateCursor(pageToPct(cursorPage), false); });
+
+  /* axis mode buttons */
+  var axBtns = {chapter:document.getElementById("axChapter"),
+                page:document.getElementById("axPage"),
+                percent:document.getElementById("axPercent")};
+  Object.keys(axBtns).forEach(function(mode){
+    axBtns[mode].addEventListener("click", function(){
+      axisMode = mode;
+      Object.keys(axBtns).forEach(function(m){
+        axBtns[m].setAttribute("aria-pressed", m === mode ? "true" : "false");
+      });
+      drawChart();
+      drawEng();
+    });
+  });
+
+  document.getElementById("tgComp").addEventListener("change", function(e){
+    showComp = e.target.checked; drawChart();
+  });
+  document.getElementById("tgOther").addEventListener("change", function(e){
+    showOther = e.target.checked; drawChart();
+  });
+
+  /* ============================================================
+     ENGAGEMENT PANEL + AUTHOR NOTES
+     ============================================================ */
+  var engSvg = document.getElementById("eng");
+  var engReadout = document.getElementById("engReadout");
+  var noteInput = document.getElementById("noteInput");
+  var noteText = document.getElementById("noteText");
+  var noteAt = document.getElementById("noteAt");
+  var addBtn = document.getElementById("addNoteBtn");
+  var noteListEl = document.getElementById("noteList");
+
+  var notes = [
+    {p:58, t:"Author's note \u2014 the reveal"},
+    {p:88, t:"Author's note \u2014 final confrontation"}
+  ];
+  var placing = false, pendingP = null;
+  var eGuide = null, eDot = null, eCursorPage = Math.round(pctToPage(58));
+
+  function engPaint(pageInt){
+    if(!eGuide) return;
+    eCursorPage = Math.max(0, Math.min(KENPC, Math.round(pageInt)));
+    var p = pageToPct(eCursorPage);
+    var v = interp(S_ENG,p);
+    eGuide.setAttribute("x1",eX(p)); eGuide.setAttribute("x2",eX(p)); eGuide.setAttribute("opacity","1");
+    eDot.setAttribute("cx",eX(p)); eDot.setAttribute("cy",eY(v)); eDot.setAttribute("opacity","1");
+    var word = v >= 115 ? "well above this book's average pace"
+             : v >= 103 ? "a little above average"
+             : v >= 95  ? "about average"
+             : v >= 80  ? "a little below average"
+             : "well below average, readers moved fast here";
+    engReadout.innerHTML = AXES[axisMode].readAt(p) + ". Pace index <b>" + Math.round(v) +
+      "</b>, " + word + ".";
+  }
+
+  engSvg.addEventListener("keydown", function(e){
+    var step = pageStep(e.shiftKey ? 5 : 1), handled = true, t = eCursorPage;
+    if(e.key === "ArrowRight") t = eCursorPage + step;
+    else if(e.key === "ArrowLeft") t = eCursorPage - step;
+    else if(e.key === "Home") t = 0;
+    else if(e.key === "End") t = KENPC;
+    else handled = false;
+    if(handled){ e.preventDefault(); engPaint(t); }
+  });
+  engSvg.addEventListener("focus", function(){ engPaint(eCursorPage); });
+
+  function drawEng(){
+    while(engSvg.firstChild) engSvg.removeChild(engSvg.firstChild);
+
+    // reference band + baseline at 100
+    engSvg.appendChild(el("rect",{x:M.l,y:ET,width:ePlotW,height:ePlotH,fill:"#fbfcfe"}));
+    [50,100,150].forEach(function(v){
+      engSvg.appendChild(el("line",{x1:M.l,y1:eY(v),x2:EW-M.r,y2:eY(v),
+        stroke: v===100 ? "#cfd8e3" : "#e8edf3",
+        "stroke-width": v===100 ? 1.2 : 1,
+        "stroke-dasharray": v===100 ? "5 4" : "none"}));
+      engSvg.appendChild(el("text",{x:M.l-10,y:eY(v)+4,"text-anchor":"end",
+        fill:"#8b98a8","font-size":"10.5"}, String(v)));
+    });
+    engSvg.appendChild(el("text",{x:14,y:ET+ePlotH/2,"text-anchor":"middle",
+      fill:"#5b6b7f","font-size":"10.5","font-weight":"600",
+      transform:"rotate(-90 14 "+(ET+ePlotH/2)+")"}, "Pace index"));
+    engSvg.appendChild(el("text",{x:EW-M.r+12,y:eY(100)+4,fill:"#5b6b7f","font-size":"10.5"},
+      "100 = book avg"));
+
+    // first-10% band, same geometry as chart above
+    engSvg.appendChild(el("rect",{x:eX(0),y:ET,width:eX(10)-eX(0),height:ePlotH,
+      fill:"#d97706","fill-opacity":".07"}));
+
+    // x ticks matching the active axis mode
+    AXES[axisMode].ticks().forEach(function(t){
+      engSvg.appendChild(el("line",{x1:eX(t.p),y1:ET+ePlotH,x2:eX(t.p),y2:ET+ePlotH+4,
+        stroke:"#c3ccd6","stroke-width":1}));
+      engSvg.appendChild(el("text",{x:eX(t.p),y:ET+ePlotH+16,"text-anchor":"middle",
+        fill:"#8b98a8","font-size":"10.5"}, t.label));
+    });
+
+    // amber line
+    engSvg.appendChild(el("polyline",{points:S_ENG.map(function(d){
+        return eX(d[0]).toFixed(1)+","+eY(d[1]).toFixed(1);
+      }).join(" "), fill:"none", stroke:"#d97706","stroke-width":"2.5",
+      "stroke-linejoin":"round","stroke-linecap":"round"}));
+
+    // author note pins — clearly author-added, indigo, pin glyph
+    notes.forEach(function(n){
+      var x = eX(n.p), y = eY(interp(S_ENG,n.p));
+      engSvg.appendChild(el("line",{x1:x,y1:ET,x2:x,y2:ET+ePlotH,stroke:"#4f46e5",
+        "stroke-width":1,"stroke-dasharray":"3 3","stroke-opacity":".55"}));
+      engSvg.appendChild(el("circle",{cx:x,cy:y,r:"4.5",fill:"#4f46e5",stroke:"#fff","stroke-width":"1.8"}));
+      var flip = n.p > 72;
+      var g = el("g");
+      var tx = flip ? x-9 : x+9;
+      g.appendChild(el("text",{x:tx,y:ET+11,"text-anchor":flip?"end":"start",
+        fill:"#4f46e5","font-size":"10.5","font-weight":"700"}, "\u25BC " + n.t));
+      engSvg.appendChild(g);
+    });
+
+    // hover + keyboard cursor
+    eGuide = el("line",{x1:M.l,y1:ET,x2:M.l,y2:ET+ePlotH,stroke:"#a85d00",
+      "stroke-width":1,opacity:"0"});
+    eDot = el("circle",{r:"4.5",fill:"#d97706",stroke:"#fff","stroke-width":"2",opacity:"0"});
+    engSvg.appendChild(eGuide); engSvg.appendChild(eDot);
+
+    var eHit = el("rect",{x:M.l,y:ET,width:ePlotW,height:ePlotH,fill:"transparent",
+      style:"cursor:"+(placing?"crosshair":"default")});
+    engSvg.appendChild(eHit);
+
+    // returns a whole standardized page, the same grid the keyboard uses
+    function eAt(clientX){
+      var rect = engSvg.getBoundingClientRect();
+      var scale = EW / rect.width;
+      var sx = (clientX - rect.left) * scale;
+      var p = Math.max(0, Math.min(100, (sx - M.l)/ePlotW*100));
+      return Math.max(0, Math.min(KENPC, Math.round(pctToPage(p))));
+    }
+    eHit.addEventListener("mousemove", function(ev){
+      if(placing) return;
+      engPaint(eAt(ev.clientX));
+    });
+    eHit.addEventListener("mouseleave", function(){
+      eGuide.setAttribute("opacity","0"); eDot.setAttribute("opacity","0");
+    });
+    eHit.addEventListener("click", function(ev){
+      if(!placing) return;
+      pendingP = pageToPct(eAt(ev.clientX));   // notes are stored as percent
+      openNoteInput(ev.clientX, ev.clientY);
+    });
+  }
+
+  function renderNoteList(){
+    noteListEl.innerHTML = "";
+    if(!notes.length){
+      var li = document.createElement("li");
+      li.innerHTML = '<span class="note">No notes yet. Use “Add a note” to mark a position.</span>';
+      noteListEl.appendChild(li);
+      return;
+    }
+    notes.slice().sort(function(a,b){ return a.p - b.p; }).forEach(function(n){
+      var li = document.createElement("li");
+      var pin = document.createElement("span");
+      pin.className = "pin-ic"; pin.setAttribute("aria-hidden","true"); pin.textContent = "\u25BC";
+      var sp = document.createElement("span");
+      sp.textContent = "Chapter " + pctToChapter(n.p) + ", page " + Math.round(pctToPage(n.p)) +
+                       " (" + Math.round(n.p) + "%): " + n.t;
+      li.appendChild(pin); li.appendChild(sp);
+      noteListEl.appendChild(li);
+    });
+  }
+
+  function openNoteInput(clientX, clientY){
+    var wrapRect = engSvg.parentNode.getBoundingClientRect();
+    noteInput.style.display = "flex";
+    var left = clientX - wrapRect.left;
+    left = Math.max(4, Math.min(wrapRect.width - 340, left - 40));
+    noteInput.style.left = left + "px";
+    noteInput.style.top  = Math.max(2, clientY - wrapRect.top - 46) + "px";
+    noteAt.textContent = "Ch. " + pctToChapter(pendingP) + " · p." + Math.round(pctToPage(pendingP));
+    noteText.value = "";
+    noteText.focus();
+  }
+  function closeNoteInput(){
+    noteInput.style.display = "none";
+    pendingP = null;
+    placing = false;
+    addBtn.setAttribute("aria-pressed","false");
+    addBtn.textContent = "+ Add a note";
+    drawEng();
+  }
+  addBtn.addEventListener("click", function(){
+    placing = !placing;
+    addBtn.setAttribute("aria-pressed", placing ? "true" : "false");
+    addBtn.textContent = placing ? "Click a position on the panel" : "+ Add a note";
+    if(!placing){ noteInput.style.display = "none"; }
+    drawEng();
+  });
+  noteText.addEventListener("keydown", function(e){
+    if(e.key === "Enter"){
+      e.preventDefault();
+      var t = noteText.value.trim();
+      if(t && pendingP != null){
+        notes.push({p:pendingP, t:"Author's note \u2014 " + t});
+        renderNoteList();
+      }
+      closeNoteInput();
+    } else if(e.key === "Escape"){
+      e.preventDefault();
+      closeNoteInput();
+    }
+  });
+
+  /* ============================================================
+     SPARKLINES
+     ============================================================ */
+  function drawSparks(){
+    var host = document.getElementById("sparks");
+    host.innerHTML = "";
+    SPARKS.forEach(function(s){
+      var card = document.createElement("div");
+      card.className = "spark";
+
+      var k = document.createElement("div"); k.className = "k"; k.textContent = s.k;
+      var v = document.createElement("div"); v.className = "v";
+      v.innerHTML = s.v[s.v.length-1].toFixed(1) + '<span class="u">' + s.u + '</span>';
+      card.appendChild(k); card.appendChild(v);
+
+      var W = 300, H = 74, pad = {l:6,r:10,t:10,b:20};
+      var lo = Math.min.apply(null, s.v), hi = Math.max.apply(null, s.v);
+      var span = (hi - lo) || 1;
+      lo -= span*0.35; hi += span*0.35;
+      function sx(i){ return pad.l + i/(s.v.length-1)*(W-pad.l-pad.r); }
+      function sy(val){ return pad.t + (1-(val-lo)/(hi-lo))*(H-pad.t-pad.b); }
+
+      var g = el("svg",{viewBox:"0 0 "+W+" "+H,role:"img",
+        "aria-label": s.k + " by month, January to June 2026: " +
+          s.v.map(function(x,i){ return MONTHS[i]+" "+x.toFixed(1)+s.u; }).join(", ") +
+          ". June is incomplete."});
+
+      // solid segment Jan..May
+      g.appendChild(el("polyline",{points:s.v.slice(0,5).map(function(val,i){
+          return sx(i).toFixed(1)+","+sy(val).toFixed(1); }).join(" "),
+        fill:"none",stroke:"#0b8a84","stroke-width":"2","stroke-linejoin":"round","stroke-linecap":"round"}));
+      // dashed final segment May..Jun
+      g.appendChild(el("line",{x1:sx(4),y1:sy(s.v[4]),x2:sx(5),y2:sy(s.v[5]),
+        stroke:"#0b8a84","stroke-width":"2","stroke-dasharray":"4 3"}));
+      // solid dots Jan..May
+      s.v.slice(0,5).forEach(function(val,i){
+        g.appendChild(el("circle",{cx:sx(i),cy:sy(val),r:"2.6",fill:"#0b8a84"}));
+      });
+      // hollow dot for incomplete Jun
+      g.appendChild(el("circle",{cx:sx(5),cy:sy(s.v[5]),r:"4",fill:"#fff",
+        stroke:"#0b8a84","stroke-width":"2","stroke-dasharray":"2 2"}));
+      // month labels
+      MONTHS.forEach(function(m,i){
+        g.appendChild(el("text",{x:sx(i),y:H-5,"text-anchor":"middle",
+          fill: i===5 ? "#a85d00" : "#8b98a8","font-size":"10",
+          "font-weight": i===5 ? "700" : "400"}, i===5 ? m+"*" : m));
+      });
+      card.appendChild(g);
+
+      var f = document.createElement("div"); f.className = "f";
+      f.textContent = "* Jun incomplete. Data settles about 45 days after month end.";
+      card.appendChild(f);
+
+      var tw = document.createElement("div");
+      tw.className = "vh";
+      tw.innerHTML = "<table class='t'><caption>" + s.k + " by month</caption><thead><tr>" +
+        MONTHS.map(function(m){ return "<th scope='col'>"+m+"</th>"; }).join("") +
+        "</tr></thead><tbody><tr>" +
+        s.v.map(function(x,i){ return "<td>"+x.toFixed(1)+s.u+(i===5?" (incomplete)":"")+"</td>"; }).join("") +
+        "</tr></tbody></table>";
+      card.appendChild(tw);
+
+      host.appendChild(card);
+    });
+  }
+
+  /* ============================================================
+     HIDDEN DATA TABLES for the two charts
+     ============================================================ */
+  function fillCurveTable(){
+    var tb = document.getElementById("curveTableBody");
+    tb.innerHTML = "";
+    S_BOOK.forEach(function(d){
+      var p = d[0];
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<th scope='row'>" + p.toFixed(1) + "%</th>" +
+        "<td>" + pctToChapter(p) + "</td>" +
+        "<td>" + Math.round(pctToPage(p)) + "</td>" +
+        "<td>" + d[1].toFixed(1) + "%</td>" +
+        "<td>" + interp(S_COMP,p).toFixed(1) + "%</td>" +
+        "<td>" + interp(S_OTHER,p).toFixed(1) + "%</td>";
+      tb.appendChild(tr);
+    });
+
+    var eb = document.getElementById("engTableBody");
+    eb.innerHTML = "";
+    S_ENG.forEach(function(d){
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<th scope='row'>" + d[0] + "%</th><td>" + pctToChapter(d[0]) +
+        "</td><td>" + d[1] + "</td>";
+      eb.appendChild(tr);
+    });
+  }
+
+  /* ============================================================
+     BOOT
+     ============================================================ */
+  drawChart();
+  drawEng();
+  renderNoteList();
+  drawSparks();
+  fillCurveTable();
+
+  // opening readout is produced by the same code path the pointer and keyboard use
+  updateCursor(pageToPct(cursorPage), false);
+  engReadout.innerHTML = "Hover the panel, or focus it and use the arrow keys, to read the pace index at any position.";
+
+  window.addEventListener("resize", function(){ tip.style.opacity = 0; });
+})();
+</script>
+</body>
+</html>
